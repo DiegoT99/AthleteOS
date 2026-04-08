@@ -1,67 +1,98 @@
 import { Router } from 'express';
+import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '../db/prisma.js';
-import { stripe } from '../stripe.js';
+import { paymentsApi, customersApi } from '../square.js';
 import { hasPremiumAccess } from '../constants.js';
 
 const router = Router();
 
+// Create payment for subscription
 router.post('/create-checkout-session', async (req, res) => {
-  const user = await prisma.user.findUnique({
-    where: { id: req.user.userId },
-    include: {
-      subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 },
-    },
-  });
-
-  if (!user) {
-    return res.status(404).json({ message: 'User not found' });
-  }
-
-  const customerId =
-    user.stripeCustomerId ||
-    (
-      await stripe.customers.create({
-        email: user.email,
-        name: user.name,
-        metadata: { userId: user.id },
-      })
-    ).id;
-
-  if (!user.stripeCustomerId) {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { stripeCustomerId: customerId },
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: req.user.userId },
+      include: { subscriptions: { orderBy: { createdAt: 'desc' }, take: 1 } },
     });
-  }
 
-  const successUrl = `${process.env.FRONTEND_URL}/billing?status=success`;
-  const cancelUrl = `${process.env.FRONTEND_URL}/billing?status=cancelled`;
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
 
-  const session = await stripe.checkout.sessions.create({
-    mode: 'subscription',
-    customer: customerId,
-    line_items: [
-      {
-        price: process.env.STRIPE_PRICE_ID,
-        quantity: 1,
+    // Create or get Square customer
+    let customerId = user.squareCustomerId;
+
+    if (!customerId) {
+      const result = await customersApi.createCustomer({
+        emailAddress: user.email,
+        givenName: user.name.split(' ')[0],
+        familyName: user.name.split(' ').slice(1).join(' ') || 'Athlete',
+      });
+
+      customerId = result.result.customer.id;
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { squareCustomerId: customerId },
+      });
+    }
+
+    // Price in cents ($9.99 = 999 cents)
+    const amountCents = 999n;
+
+    const paymentRequest = {
+      sourceId: 'cnp',
+      idempotencyKey: uuidv4(),
+      amountMoney: {
+        amount: amountCents,
+        currency: 'USD',
       },
-    ],
-    subscription_data: {
-      trial_period_days: 14,
-      metadata: { userId: user.id },
-    },
-    success_url: successUrl,
-    cancel_url: cancelUrl,
-    metadata: {
-      userId: user.id,
-    },
-  });
+      customerId: customerId,
+      note: 'AthleteOS Premium Subscription - $9.99/month',
+    };
 
-  return res.json({ url: session.url });
+    const response = await paymentsApi.createPayment(paymentRequest);
+
+    if (response.result.payment.status === 'COMPLETED') {
+      // Payment succeeded, activate subscription for 1 month
+      const now = new Date();
+      const endsAt = new Date(now);
+      endsAt.setMonth(endsAt.getMonth() + 1);
+
+      const existing = user.subscriptions?.[0];
+
+      if (existing) {
+        await prisma.subscription.update({
+          where: { id: existing.id },
+          data: {
+            status: 'active',
+            squareCustomerId: customerId,
+            currentPeriodStart: now,
+            currentPeriodEnd: endsAt,
+          },
+        });
+      } else {
+        await prisma.subscription.create({
+          data: {
+            userId: user.id,
+            squareCustomerId: customerId,
+            status: 'active',
+            currentPeriodStart: now,
+            currentPeriodEnd: endsAt,
+          },
+        });
+      }
+
+      return res.json({ success: true, message: 'Payment completed and subscription activated' });
+    }
+
+    return res.status(400).json({ message: 'Payment declined or incomplete', payment: response.result.payment });
+  } catch (error) {
+    console.error('Square checkout error:', error);
+    return res.status(500).json({ message: 'Failed to process payment', error: error.message });
+  }
 });
 
-export default router;
-
+// Redeem promo code
 router.post('/redeem-promo', async (req, res) => {
   const { code } = req.body;
 
@@ -93,12 +124,12 @@ router.post('/redeem-promo', async (req, res) => {
   const promoEndsAt = new Date(now);
   promoEndsAt.setMonth(promoEndsAt.getMonth() + 1);
 
-  const customerId = user.stripeCustomerId || `promo_${user.id}`;
+  const customerId = user.squareCustomerId || `promo_${user.id}`;
 
-  if (!user.stripeCustomerId) {
+  if (!user.squareCustomerId) {
     await prisma.user.update({
       where: { id: user.id },
-      data: { stripeCustomerId: customerId },
+      data: { squareCustomerId: customerId },
     });
   }
 
@@ -107,7 +138,7 @@ router.post('/redeem-promo', async (req, res) => {
       where: { id: existing.id },
       data: {
         status: 'active',
-        stripeCustomerId: customerId,
+        squareCustomerId: customerId,
         currentPeriodStart: now,
         currentPeriodEnd: promoEndsAt,
       },
@@ -116,7 +147,7 @@ router.post('/redeem-promo', async (req, res) => {
     await prisma.subscription.create({
       data: {
         userId: user.id,
-        stripeCustomerId: customerId,
+        squareCustomerId: customerId,
         status: 'active',
         currentPeriodStart: now,
         currentPeriodEnd: promoEndsAt,
@@ -126,3 +157,5 @@ router.post('/redeem-promo', async (req, res) => {
 
   return res.json({ message: 'Promo code applied! You now have 1 month of access.' });
 });
+
+export default router;

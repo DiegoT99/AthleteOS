@@ -13,6 +13,7 @@ import dashboardRoutes from './routes/dashboard.routes.js';
 import analyticsRoutes from './routes/analytics.routes.js';
 import billingRoutes from './routes/billing.routes.js';
 import profileRoutes from './routes/profile.routes.js';
+import webhooksRoutes from './routes/webhooks.routes.js';
 import { requireAuth } from './middleware/auth.js';
 import { requirePremium } from './middleware/requireSubscription.js';
 
@@ -32,6 +33,25 @@ app.use(
   })
 );
 app.use(morgan('dev'));
+
+// Raw body middleware for webhook signature verification
+app.use((req, res, next) => {
+  if (req.path === '/api/webhooks/square') {
+    let rawBody = '';
+    req.setEncoding('utf8');
+    req.on('data', chunk => {
+      rawBody += chunk;
+    });
+    req.on('end', () => {
+      req.rawBody = rawBody;
+      req.body = JSON.parse(rawBody);
+      next();
+    });
+  } else {
+    next();
+  }
+});
+
 app.use(express.json({ limit: '10mb' }));
 
 app.get('/health', (_req, res) => {
@@ -39,6 +59,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/webhooks', webhooksRoutes);
 
 app.use('/api/categories', requireAuth, categoriesRoutes);
 app.use('/api/subscription', requireAuth, subscriptionRoutes);

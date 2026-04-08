@@ -2,7 +2,9 @@ import 'dotenv/config';
 import ws from 'ws';
 import { neonConfig } from '@neondatabase/serverless';
 import { PrismaNeon } from '@prisma/adapter-neon';
-import { PrismaClient } from '@prisma/client';
+import prismaPkg from '@prisma/client';
+
+const { PrismaClient } = prismaPkg;
 
 neonConfig.webSocketConstructor = ws;
 

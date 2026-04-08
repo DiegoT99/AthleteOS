@@ -71,11 +71,19 @@ export const ensureLocalUserFromStack = async (stackUser) => {
     },
   });
 
+  const trialStart = new Date();
+  const trialEnd = new Date(trialStart);
+  trialEnd.setDate(trialEnd.getDate() + 14);
+
   await prisma.subscription.create({
     data: {
       userId: created.id,
-      status: 'inactive',
+      status: 'trialing',
       stripeCustomerId: `pending_${created.id}`,
+      trialStart,
+      trialEnd,
+      currentPeriodStart: trialStart,
+      currentPeriodEnd: trialEnd,
     },
   });
 

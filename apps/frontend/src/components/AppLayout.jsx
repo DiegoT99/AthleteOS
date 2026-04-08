@@ -3,6 +3,7 @@ import { Link, NavLink, Outlet, useLocation } from 'react-router-dom';
 import { Menu, Moon, Sun, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCategory } from '../context/CategoryContext';
+import { api } from '../lib/api';
 
 const navItems = [
   { label: 'Dashboard', to: '/dashboard' },
@@ -19,6 +20,9 @@ export const AppLayout = () => {
   const { logout } = useAuth();
   const { categories, selectedCategoryId, setSelectedCategoryId } = useCategory();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [hasPremium, setHasPremium] = useState(false);
+  const [subscription, setSubscription] = useState(null);
+  const [countdownText, setCountdownText] = useState('');
   const location = useLocation();
 
   const theme = document.documentElement.classList.contains('dark') ? 'dark' : 'light';
@@ -26,6 +30,69 @@ export const AppLayout = () => {
   useEffect(() => {
     setMobileNavOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSubscription = async () => {
+      try {
+        const { data } = await api.get('/api/subscription');
+        const status = String(data?.status || 'inactive').toLowerCase();
+        const premiumByStatus = status === 'active' || status === 'trialing';
+        const premiumByServer = typeof data?.hasPremiumAccess === 'boolean' ? data.hasPremiumAccess : premiumByStatus;
+        if (mounted) {
+          setHasPremium(premiumByServer);
+          setSubscription(data);
+        }
+      } catch {
+        if (mounted) {
+          setHasPremium(false);
+          setSubscription(null);
+        }
+      }
+    };
+
+    loadSubscription();
+
+    return () => {
+      mounted = false;
+    };
+  }, [location.pathname]);
+
+  useEffect(() => {
+    const formatCountdown = () => {
+      if (!subscription?.accessEndsAt) {
+        setCountdownText('');
+        return;
+      }
+
+      const remainingMs = new Date(subscription.accessEndsAt).getTime() - Date.now();
+
+      if (remainingMs <= 0) {
+        setCountdownText('Expired');
+        return;
+      }
+
+      const totalMinutes = Math.floor(remainingMs / 60000);
+      const days = Math.floor(totalMinutes / (60 * 24));
+      const hours = Math.floor((totalMinutes % (60 * 24)) / 60);
+      const minutes = totalMinutes % 60;
+
+      setCountdownText(`${days}d ${hours}h ${minutes}m`);
+    };
+
+    formatCountdown();
+    const timer = setInterval(formatCountdown, 60000);
+
+    return () => clearInterval(timer);
+  }, [subscription]);
+
+  const status = String(subscription?.status || 'inactive').toLowerCase();
+  const isTrialing = status === 'trialing' && countdownText;
+  const hasRenewalCountdown = status === 'active' && countdownText;
+  const expiresSoon = subscription?.accessEndsAt
+    ? new Date(subscription.accessEndsAt).getTime() - Date.now() <= 1000 * 60 * 60 * 24 * 3
+    : false;
 
   const toggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
@@ -46,12 +113,25 @@ export const AppLayout = () => {
             >
               {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
             </button>
-            <Link to="/dashboard" className="flex items-center gap-2 text-xl font-bold tracking-tight text-emerald-500">
+            <Link to={hasPremium ? '/dashboard' : '/billing'} className="flex items-center gap-2 text-xl font-bold tracking-tight text-emerald-500">
               <img src="/AthleteOS_PWAlogo.png" alt="AthleteOS" className="h-8 w-8 rounded-lg border border-emerald-300/40 object-cover" />
               <span>AthleteOS</span>
             </Link>
           </div>
           <div className="flex items-center gap-2">
+            {(isTrialing || hasRenewalCountdown) && (
+              <div
+                className={`hidden rounded-lg border px-3 py-2 text-xs font-semibold md:block ${
+                  expiresSoon
+                    ? 'border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200'
+                    : 'border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-700 dark:bg-emerald-950 dark:text-emerald-200'
+                }`}
+              >
+                {isTrialing
+                  ? `Free trial ends in ${countdownText}`
+                  : `Subscription renews in ${countdownText}`}
+              </div>
+            )}
             <button
               type="button"
               onClick={toggleTheme}
@@ -69,6 +149,14 @@ export const AppLayout = () => {
           </div>
         </div>
       </header>
+
+      {(isTrialing || hasRenewalCountdown) && (
+        <div className="border-b border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 md:hidden">
+          {isTrialing
+            ? `Free trial ends in ${countdownText}`
+            : `Subscription renews in ${countdownText}`}
+        </div>
+      )}
 
       {mobileNavOpen && (
         <button
@@ -92,11 +180,12 @@ export const AppLayout = () => {
           </label>
           <select
             value={selectedCategoryId}
+            disabled={!hasPremium}
             onChange={(e) => {
               setSelectedCategoryId(e.target.value);
               setMobileNavOpen(false);
             }}
-            className="mb-4 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+            className="mb-4 w-full rounded-lg border border-slate-300 bg-white p-2 text-sm disabled:cursor-not-allowed disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800"
           >
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
@@ -104,21 +193,35 @@ export const AppLayout = () => {
               </option>
             ))}
           </select>
+          {!hasPremium && (
+            <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-300">
+              Account locked. Activate billing or redeem a promo code to unlock app features.
+            </p>
+          )}
           <nav className="space-y-1">
             {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  `block rounded-lg px-3 py-2 text-sm font-medium ${
-                    isActive
-                      ? 'bg-emerald-500 text-slate-950'
-                      : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
-                  }`
-                }
-              >
-                {item.label}
-              </NavLink>
+              hasPremium || item.to === '/billing' ? (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    `block rounded-lg px-3 py-2 text-sm font-medium ${
+                      isActive
+                        ? 'bg-emerald-500 text-slate-950'
+                        : 'text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+                    }`
+                  }
+                >
+                  {item.label}
+                </NavLink>
+              ) : (
+                <span
+                  key={item.to}
+                  className="block cursor-not-allowed rounded-lg px-3 py-2 text-sm font-medium text-slate-400 opacity-70"
+                >
+                  {item.label}
+                </span>
+              )
             ))}
           </nav>
         </aside>

@@ -11,6 +11,24 @@ export const DEFAULT_CATEGORIES = [
 
 export const PREMIUM_STATUSES = ['trialing', 'active'];
 
+export const hasPremiumAccess = (subscription) => {
+  if (!subscription) {
+    return false;
+  }
+
+  if (!PREMIUM_STATUSES.includes(subscription.status)) {
+    return false;
+  }
+
+  const accessEndsAt = subscription.currentPeriodEnd ?? subscription.trialEnd;
+
+  if (!accessEndsAt) {
+    return true;
+  }
+
+  return new Date(accessEndsAt).getTime() > Date.now();
+};
+
 export const ADMIN_EMAILS = ['diegotwebdesign@gmail.com'];
 
 export const isAdminEmail = (email) => {

@@ -43,11 +43,19 @@ router.post('/register', async (req, res) => {
       },
     });
 
+    const trialStart = new Date();
+    const trialEnd = new Date(trialStart);
+    trialEnd.setDate(trialEnd.getDate() + 14);
+
     await prisma.subscription.create({
       data: {
         userId: user.id,
-        status: 'inactive',
+        status: 'trialing',
         stripeCustomerId: `pending_${user.id}`,
+        trialStart,
+        trialEnd,
+        currentPeriodStart: trialStart,
+        currentPeriodEnd: trialEnd,
       },
     });
 

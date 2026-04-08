@@ -1,0 +1,26 @@
+{
+  "name": "athleteos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AthleteOS full-stack monorepo",
+  "scripts": {
+    "dev": "npm-run-all --parallel dev:web dev:api",
+    "dev:web": "npm run dev --prefix apps/frontend",
+    "dev:api": "npm run dev --prefix apps/backend",
+    "build": "npm run build --prefix apps/frontend",
+    "start": "npm run start --prefix apps/backend"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "npm-run-all": "^4.1.5"
+  },
+  "dependencies": {
+    "@neondatabase/auth": "^0.2.0-beta.1"
+  }
+}

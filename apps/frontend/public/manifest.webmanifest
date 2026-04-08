@@ -1,0 +1,45 @@
+{
+  "name": "AthleteOS",
+  "short_name": "AthleteOS",
+  "id": "/",
+  "description": "AthleteOS training tracker",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#0f172a",
+  "theme_color": "#10b981",
+  "categories": ["sports", "health", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "url": "/dashboard"
+    },
+    {
+      "name": "Category Tracker",
+      "short_name": "Category",
+      "url": "/category"
+    },
+    {
+      "name": "Profile",
+      "short_name": "Profile",
+      "url": "/profile"
+    }
+  ],
+  "icons": [
+    {
+      "src": "/AthleteOS_PWAlogo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/AthleteOS_PWAlogo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

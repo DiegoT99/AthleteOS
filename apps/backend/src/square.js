@@ -1,8 +1,11 @@
-import { Client, Environment } from 'square';
+import squarePkg from 'square';
 
-export const squareClient = new Client({
+const { SquareClient, SquareEnvironment } = squarePkg;
+
+export const squareClient = new SquareClient({
   accessToken: process.env.SQUARE_ACCESS_TOKEN,
-  environment: Environment.Sandbox,
+  environment: SquareEnvironment.Sandbox,
 });
 
-export const { paymentsApi, customersApi } = squareClient;
+export const paymentsApi = squareClient.payments;
+export const customersApi = squareClient.customers;

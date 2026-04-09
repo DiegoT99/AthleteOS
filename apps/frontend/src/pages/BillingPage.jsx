@@ -24,6 +24,11 @@ export const BillingPage = () => {
       if (data.url) {
         window.location.href = data.url;
       }
+    } catch (err) {
+      setPromoMessage({
+        ok: false,
+        text: err?.response?.data?.message || 'Unable to open Square checkout right now.',
+      });
     } finally {
       setLoading(false);
     }
@@ -46,7 +51,7 @@ export const BillingPage = () => {
             onClick={startCheckout}
             className="mt-4 min-h-11 w-full rounded-lg bg-emerald-500 px-4 py-3 text-sm font-semibold text-slate-950 disabled:opacity-60 sm:w-auto"
           >
-            {loading ? 'Opening Stripe...' : 'Upgrade / Manage Subscription'}
+            {loading ? 'Opening Square Checkout...' : 'Upgrade / Renew Subscription'}
           </button>
 
           <div className="mt-6 border-t border-slate-200 pt-5 dark:border-slate-700">
